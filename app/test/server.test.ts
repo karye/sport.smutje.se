@@ -549,7 +549,7 @@ describe("dubbletter mellan flöden", () => {
 
     const match = kropp.handelser.filter((h) => h.titel === "Match: SBBK P16 - Hammarby IF");
     expect(match).toHaveLength(1);
-    expect([...(match[0]?.barn ?? [])].sort()).toEqual(["Barn 2", "Barn 1"]);
+    expect([...(match[0]?.barn ?? [])].sort()).toEqual(["Barn 1", "Barn 2"]);
     expect([...(match[0]?.floden ?? [])].sort()).toEqual(["test-dubb", "test-server"]);
     // Kopian får inte krocka med sig själv.
     expect(match[0]?.krock).toBeNull();

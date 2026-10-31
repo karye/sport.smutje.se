@@ -12,7 +12,7 @@ process.env.SESSION_SECRET = HEMLIGHET;
 process.env.GOOGLE_CLIENT_ID = "klient-id.apps.googleusercontent.com";
 process.env.GOOGLE_CLIENT_SECRET = "hemlig";
 process.env.REDIRECT_URI = "https://sport.smutje.se/auth/callback";
-process.env.ALLOWED_EMAILS = " Förälder 1@Example.com:foralder , foralder2@example.com:foralder, felpost ";
+process.env.ALLOWED_EMAILS = " FORALDER1@Example.com:foralder , foralder2@example.com:foralder, felpost ";
 
 const auth = await import("../src/auth.ts");
 type Sessionsnytta = import("../src/auth.ts").Sessionsnytta;
@@ -65,7 +65,7 @@ describe("allowlist och roller", () => {
   });
 
   test("adressen jämförs utan hänsyn till skiftläge och blanksteg", () => {
-    expect(auth.rollFor("  FORALDER1@example.com ")).toBe("foralder");
+    expect(auth.rollFor("  FORALDER1@example.COM ")).toBe("foralder");
   });
 
   test("okänd adress släpps inte in", () => {
@@ -81,13 +81,13 @@ describe("allowlist och roller", () => {
   test("okänd roll blir barn", () => {
     process.env.ALLOWED_EMAILS = "barn1@example.com:admin";
     expect(auth.rollFor("barn1@example.com")).toBe("barn");
-    process.env.ALLOWED_EMAILS = " Förälder 1@Example.com:foralder , foralder2@example.com:foralder, felpost ";
+    process.env.ALLOWED_EMAILS = " FORALDER1@Example.com:foralder , foralder2@example.com:foralder, felpost ";
   });
 
   test("adress utan roll blir barn", () => {
     process.env.ALLOWED_EMAILS = "barn2@example.com";
     expect(auth.rollFor("barn2@example.com")).toBe("barn");
-    process.env.ALLOWED_EMAILS = " Förälder 1@Example.com:foralder , foralder2@example.com:foralder, felpost ";
+    process.env.ALLOWED_EMAILS = " FORALDER1@Example.com:foralder , foralder2@example.com:foralder, felpost ";
   });
 });
 

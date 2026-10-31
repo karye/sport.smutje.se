@@ -100,7 +100,7 @@ export function inloggningsSida(saknas: string[]): Response {
 
   return sida({
     rubrik: "Familjens kalender",
-    underrubrik: "Barn 1 och Barn 2s idrotter, samlade. Bara vi kommer in.",
+    underrubrik: "Barnens idrotter, samlade. Bara vi kommer in.",
     noCache: true,
     innehall: `<p>Logga in med det Google-konto som finns i familjens lista.</p>
       <p class="knapprad"><a class="knapp" href="/auth/login">Logga in med Google</a></p>`,

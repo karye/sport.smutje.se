@@ -1,7 +1,7 @@
 {
   "name": "Familjens kalender",
   "short_name": "Kalendern",
-  "description": "Barn 1 och Barn 2:s idrotter, samlade.",
+  "description": "Familjens idrotter, samlade.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

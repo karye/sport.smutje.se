@@ -58,7 +58,7 @@ vad som behålls och vad som ändras.
 | Månadskalender med `v.` i marginalen | **Behålls, och ersätter säsongsvyn.** En månadsgrid får plats på 390 px; 12 månadsband behövdes bara för att en årsmatris inte gör det. Flerdygnshändelser (cup, läger) får en egen rad ovanför rutnätet, eftersom en grid aldrig kan visa något som spänner över dagar. |
 | Detaljvy vid klick på pass | **Behålls som egen sida `/pass/<id>`**, inte som ark eller query-parameter. Se avsnitt 4.4. |
 | `Ansvarig` som cykelknapp | **Avråds.** Fem val i en cykel är upp till fyra tryck, och ett feltryck syns inte. Knappen visar nuvarande värde och öppnar arket. |
-| `Förälder A` / `Förälder B` | **Byt till namn:** Förälder 1 och Förälder 2. Anonyma etiketter kostar en översättning i huvudet varje gång. |
+| `Förälder A` / `Förälder B` | **Behålls inte som etiketter.** Namnen kommer från Google-kontot vid inloggning; i det här dokumentet skrivs de som *Förälder 1* och *Förälder 2*, eftersom repot är publikt. |
 | Egen `Veckokrockar`-flik | **Stryks.** Krockarna syns i tidsaxeln och som triangel i månaden. Tre flikar i bottennavet slår fem. |
 | Serverkod i en flik i appen | **Stryks.** I demon är den scaffolding. I den riktiga appen blir koden i bundlen en andra, tyst divergerande sanning. Koden hör i git; README dokumenterar den. |
 | `Skicka till Google Kalender` i MVP | **Skjuts fram.** Kräver känsligt scope, tokenlagring och refresh-flöde. En `.ics`-nedladdning per pass ger samma nytta utan nyckel. Se avsnitt 11. |
@@ -172,7 +172,7 @@ Frågan den svarar på: *när är det cup, läger och sammandrag — och hur ser
 
 - **Mån–sön**, ISO-vecka i vänstermarginalen, `v.` som prefix.
 - **Varningstriangeln räknar bara olösta krockar.** En triangel som tänds även efter att Förälder 2 tagit
-  Barn 2 pass blir permanent brus och slutar betyda något. Se avsnitt 8.4.
+  Barn 2:s pass blir permanent brus och slutar betyda något. Se avsnitt 8.4.
 - **Klick på dag** visar dagens kort under rutnätet. **Klick på pass** går till `/pass/<id>`.
 - **Rutnätet stegar kalenderdagar, inte 24 timmar.** Övergången till vintertid ger ett dygn på 25
   timmar; att addera 86 400 000 ms från lokal midnatt gav då 23:00 kvällen innan, samma datum två
@@ -935,7 +935,7 @@ Gränssnittet ska kunna byggas, granskas och jämföras innan de riktiga flöden
   - en `RECURRENCE-ID`-flyttad träning
   - en vecka som spänner över ett årsskifte (ISO-vecka 1)
 - **`bun run seed`** fyller en demdatabas med två flöden, Barn 1 och Barn 2, tre veckor framåt och
-  en krock på lördagen (Barn 1:s match på Kärrtorps IP 10:00, samling 09:15; Barn 2s sammandrag i
+  en krock på lördagen (Barn 1:s match på Kärrtorps IP 10:00, samling 09:15; Barn 2:s sammandrag i
   Äppelviksskolan 10:15, samling 09:30). Samma data används i testerna, så att gränssnittet och
   krockmodellen aldrig kan glida ifrån varandra.
 - **Mock-växel i `api.ts`**: `VITE_MOCK=1` serverar fixtures i stället för `/api/*`, med samma
