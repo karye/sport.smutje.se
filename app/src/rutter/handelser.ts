@@ -110,6 +110,8 @@ function intervall(url: URL): { fran: number; till: number } | { fel: string } {
  */
 let feedBarn: Map<string, string[]> = new Map();
 let barnFärger: Map<string, string> = new Map();
+/** Flödets klubbar, räknade ur lagmappningen. Används bara när det bara finns en. */
+let feedKlubbar: Map<string, Set<string>> = new Map();
 
 export function laddaFeedBarn(): void {
   const färger = new Map<string, string>();
@@ -117,6 +119,20 @@ export function laddaFeedBarn(): void {
     färger.set(r.namn, r.farg);
   }
   barnFärger = färger;
+
+  const klubbar = new Map<string, Set<string>>();
+  for (const r of db
+    .query<{ feed_id: string; klubb: string }, []>(
+      `SELECT e.feed_id AS feed_id, l.klubb AS klubb
+       FROM events e JOIN lag l ON l.kode = e.lag
+       WHERE l.klubb IS NOT NULL GROUP BY e.feed_id, l.klubb`
+    )
+    .all()) {
+    const mängd = klubbar.get(r.feed_id) ?? new Set<string>();
+    mängd.add(r.klubb);
+    klubbar.set(r.feed_id, mängd);
+  }
+  feedKlubbar = klubbar;
 
   const karta = new Map<string, string[]>();
   for (const r of db.query<{ feed_id: string; barn: string }, []>("SELECT feed_id, barn FROM feed_barn").all()) {
@@ -150,9 +166,20 @@ function fargLista(rad: Rad): string[] {
   return lista.length > 0 ? [...new Set(lista)] : [rad.color];
 }
 
-/** Klubben: lagets först, flödets som reserv. */
-function klubbFor(rad: Rad): string {
-  return rad.lag_klubb ?? rad.club;
+/**
+ * Klubben: bara lagets.
+ *
+ * Flödets klubb är ingen reserv — Sportadmins flöde rymmer två föreningar, och att ärva
+ * flödets etikett satte SBBK på Södra Ängbys pass. Saknar laget klubb visas ingen förening.
+ */
+function klubbFor(rad: Rad): string | null {
+  if (rad.lag_klubb) return rad.lag_klubb;
+
+  // Reserven gäller bara en källa med högst en klubb: en scoutkår eller en enskild förening.
+  // Sportadmins flöde har två, och där får inget ärvas — då visas ingen förening.
+  const klubbar = feedKlubbar.get(rad.feed_id);
+  if (!klubbar) return rad.club; // källan har inga lag alls, alltså en förening
+  return klubbar.size === 1 ? ([...klubbar][0] ?? null) : null;
 }
 
 /**
@@ -174,8 +201,72 @@ function tillAnsvarig(rad: Rad): Ansvarig {
 }
 
 /** Ett pass som klienten ser det. Krocken skickas med, färdigräknad. */
+/**
+ * Slår ihop samma pass från två flöden.
+ *
+ * Utan detta visas en match två gånger när både barnets och lagets flöde bär den, och värre:
+ * krockmodellen jämför då passet med sig självt och kallar det "Dubbelbokat". Sammanslagningen
+ * sker därför innan `beraknaKrockar`.
+ *
+ * Bara rader från *olika* flöden slås ihop. Två pass i samma flöde med samma nyckel är två
+ * verkliga pass (ett sammandrag med vag titel), och de ska förbli två.
+ */
+type Sammanfogad = Rad & { alla_barn: string[]; alla_farger: string[]; floden: string[] };
+
+function slaIhopDubbletter(rader: readonly Rad[]): Sammanfogad[] {
+  const grupper = new Map<string, Rad[]>();
+  for (const r of rader) {
+    const lista = grupper.get(r.fingerprint) ?? [];
+    lista.push(r);
+    grupper.set(r.fingerprint, lista);
+  }
+
+  const ut: Sammanfogad[] = [];
+
+  for (const grupp of grupper.values()) {
+    const flöden = new Set(grupp.map((r) => r.feed_id));
+
+    if (grupp.length === 1 || flöden.size === 1) {
+      for (const r of grupp) ut.push({ ...r, alla_barn: barnFor(r), alla_farger: fargLista(r), floden: [r.feed_id] });
+      continue;
+    }
+
+    // Basrad: den som senast fick en överstyrning, alltså den familjen faktiskt rört.
+    const bas = [...grupp].sort((a, b) => (b.uppdaterad ?? 0) - (a.uppdaterad ?? 0))[0]!;
+
+    const barn = new Set<string>();
+    const färger = new Set<string>();
+    for (const r of grupp) {
+      for (const b of barnFor(r)) barn.add(b);
+      for (const f of fargLista(r)) färger.add(f);
+    }
+
+    const medSamling = grupp.find((r) => r.samling_override != null || r.samling_ms != null) ?? bas;
+    const medPlats = grupp.find((r) => r.plats_id != null) ?? grupp.find((r) => r.plats_text != null) ?? bas;
+    const medText = grupp.find((r) => r.beskrivning != null) ?? bas;
+
+    ut.push({
+      ...bas,
+      plats_id: medPlats.plats_id,
+      plats_text: medPlats.plats_text,
+      samling_ms: medSamling.samling_ms,
+      samling_kalla: medSamling.samling_kalla,
+      samling_override: bas.samling_override ?? medSamling.samling_override,
+      beskrivning: medText.beskrivning,
+      motstandare: bas.motstandare ?? grupp.find((r) => r.motstandare)?.motstandare ?? null,
+      // Inställt bara om alla kopior är inställda.
+      ics_status: grupp.every((r) => r.ics_status === "CANCELLED") ? "CANCELLED" : "CONFIRMED",
+      alla_barn: [...barn],
+      alla_farger: [...färger],
+      floden: [...flöden],
+    });
+  }
+
+  return ut.sort((a, b) => a.start_ms - b.start_ms);
+}
+
 function tillKort(
-  r: Rad,
+  r: Sammanfogad,
   k: ReturnType<typeof beraknaKrockar> extends Map<string, infer V> ? V | undefined : never,
   medBeskrivning = false
 ) {
@@ -183,13 +274,14 @@ function tillKort(
     id: `${r.feed_id}|${r.uid}`,
     titel: r.titel,
     lag: r.lag,
-    barn: barnFor(r),
+    barn: r.alla_barn,
     sport: sportFor(r),
     sportFarg: r.sport_farg,
     klubb: klubbFor(r),
-    fargLista: fargLista(r),
+    fargLista: r.alla_farger,
+    floden: r.floden,
     omappad: ärOmappad(r),
-    farg: fargFor(r),
+    farg: r.alla_farger[0] ?? fargFor(r),
     start: r.start_ms,
     slut: r.slut_ms,
     heldag: r.heldag === 1,
@@ -282,7 +374,7 @@ export const handelseRutter = new Elysia()
       const dolda = db
         .query<Rad, []>(`${SQL.replace("AND e.start_ms <= ? AND e.slut_ms >= ?", "AND o.dold = 1")} LIMIT 200`)
         .all();
-      return { fran: 0, till: 0, handelser: dolda.map((r) => tillKort(r, undefined)) };
+      return { fran: 0, till: 0, handelser: slaIhopDubbletter(dolda).map((r) => tillKort(r, undefined)) };
     }
 
     const visaDolda = url.searchParams.get("includeHidden") === "1" && anvandare.roll === "foralder";
@@ -292,18 +384,18 @@ export const handelseRutter = new Elysia()
       .filter(Boolean);
 
     laddaFeedBarn();
-    const rader = db.query<Rad, [number, number]>(SQL).all(spann.till, spann.fran);
+    const rader = slaIhopDubbletter(db.query<Rad, [number, number]>(SQL).all(spann.till, spann.fran));
     const platser = new Map(lasPlatser().map((p) => [p.id, p]));
 
     const valda = rader
       .filter((r) => visaDolda || r.dold !== 1)
       .filter(
-        (r) => barnFilter.length === 0 || barnFor(r).some((b) => barnFilter.includes(b.toLowerCase()))
+        (r) => barnFilter.length === 0 || r.alla_barn.some((b) => barnFilter.includes(b.toLowerCase()))
       );
 
     const pass: KrockPass[] = valda.map((r) => ({
       id: `${r.feed_id}|${r.uid}`,
-      barn: barnFor(r),
+      barn: r.alla_barn,
       plats_id: r.plats_id,
       samling_ms: r.samling_override ?? r.samling_ms,
       start_ms: r.start_ms,
@@ -449,21 +541,21 @@ export const handelseRutter = new Elysia()
       .get(params.feed, uid);
     if (!målet) return Response.json({ fel: "Passet finns inte" }, { status: 404 });
 
-    const rader = db
-      .query<Rad, [number, number]>(SQL)
-      .all(målet.slut_ms + 36 * 3_600_000, målet.start_ms - 36 * 3_600_000);
+    const rader = slaIhopDubbletter(
+      db.query<Rad, [number, number]>(SQL).all(målet.slut_ms + 36 * 3_600_000, målet.start_ms - 36 * 3_600_000)
+    );
 
     if (villHaFil) return somKalenderfil(uid, målet);
 
     // Fönstret kan i teorin missa målet om dess eget intervall ligger utanför; lägg till då.
     const närliggande = rader.some((r) => r.uid === målet.uid && r.feed_id === målet.feed_id)
       ? rader
-      : [målet, ...rader];
+      : slaIhopDubbletter([målet, ...rader]);
 
     const platser = new Map(lasPlatser().map((p) => [p.id, p]));
     const pass: KrockPass[] = närliggande.map((r) => ({
       id: `${r.feed_id}|${r.uid}`,
-      barn: barnFor(r),
+      barn: r.alla_barn,
       plats_id: r.plats_id,
       samling_ms: r.samling_override ?? r.samling_ms,
       start_ms: r.start_ms,
@@ -477,8 +569,13 @@ export const handelseRutter = new Elysia()
     const minKrock = krockar.get(`${målet.feed_id}|${målet.uid}`);
     const motIds = new Set(minKrock?.mot ?? []);
 
+    // Målet kan ha slagits ihop med en kopia från ett annat flöde; då gäller den sammanslagna raden.
+    const sammanslaget =
+      närliggande.find((r) => r.uid === målet.uid && r.feed_id === målet.feed_id) ??
+      (slaIhopDubbletter([målet])[0] as Sammanfogad);
+
     return {
-      handelse: tillKort(målet, krockar.get(`${målet.feed_id}|${målet.uid}`), true),
+      handelse: tillKort(sammanslaget, krockar.get(`${målet.feed_id}|${målet.uid}`), true),
       krockar: närliggande
         .filter((r) => motIds.has(`${r.feed_id}|${r.uid}`))
         .map((r) => tillKort(r, krockar.get(`${r.feed_id}|${r.uid}`))),

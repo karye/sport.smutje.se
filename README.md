@@ -54,7 +54,7 @@ vad som behålls och vad som ändras.
 | I prototypen | Bedömning |
 |---|---|
 | Vecka som förvald startvy | **Behålls.** Invändningen var att man på tisdag morgon vill se dagens pass — men veckovyn visar samling, plats, krock och skjutsarknapp per dag. Det *är* agendan. Alltså en vy, inte två, med kravet att veckan öppnar på **idag**. |
-| `Denna vecka` / `Nästa vecka` + `<` `>` | **Behålls, med tredje tillståndet:** när man bläddrat bort byts knapparna mot en enda `Tillbaka till denna vecka`. Två knappar plus pilar plus oklart aktivt läge är mer gränssnitt än information. |
+| `Aktuell vecka` / `Nästa vecka` + `<` `>` | **Behålls, med tredje tillståndet:** när man bläddrat bort byts knapparna mot en enda `Tillbaka till aktuell vecka`. Den vecka man står i är märkt, inte klickbar. |
 | Månadskalender med `v.` i marginalen | **Behålls, och ersätter säsongsvyn.** En månadsgrid får plats på 390 px; 12 månadsband behövdes bara för att en årsmatris inte gör det. Flerdygnshändelser (cup, läger) får en egen rad ovanför rutnätet, eftersom en grid aldrig kan visa något som spänner över dagar. |
 | Detaljvy vid klick på pass | **Behålls som egen sida `/pass/<id>`**, inte som ark eller query-parameter. Se avsnitt 4.4. |
 | `Ansvarig` som cykelknapp | **Avråds.** Fem val i en cykel är upp till fyra tryck, och ett feltryck syns inte. Knappen visar nuvarande värde och öppnar arket. |
@@ -107,7 +107,7 @@ Frågan den svarar på: *vad händer i veckan, och vem gör vad?*
 ```
 ┌──────────────────────────────────────┐
 │ sport.smutje.se            Förälder 1  ⚙︎ │  header, 52 px
-│ ‹  Denna vecka · Nästa vecka  ›  v.45 │  veckonavigering
+│ ‹  Aktuell vecka · Nästa vecka  ›  v.45│  veckonavigering
 │ [Alla] [Barn 1] [Barn 2] · [Bandy] [Innebandy]│ chips
 ├──────────────────────────────────────┤
 │  Idag · onsdag 29 oktober            │
@@ -129,9 +129,9 @@ Frågan den svarar på: *vad händer i veckan, och vem gör vad?*
 
 - **Öppnar på idag.** Dagar före idag är ihopfällda till en rad (`3 pass tidigare i veckan`) som
   går att fälla ut. Veckan är sju dagar, men frågan den besvarar börjar i nuet.
-- **Veckonavigering** med tre tillstånd: `Denna vecka` · `Nästa vecka` · `‹ ›` för fritt bläddrande.
+- **Veckonavigering** med tre tillstånd: `Aktuell vecka` · `Nästa vecka` · `‹ ›` för fritt bläddrande.
   När man bläddrat bort från innevarande vecka ersätts de två första av en enda
-  `Tillbaka till denna vecka`.
+  `Tillbaka till aktuell vecka`. Ordet är **aktuell**, inte *denna*, i hela gränssnittet.
 - **Två lägen**, växlade med en segmentkontroll:
   - **7-dagarsöversikt** (standard): kort per dag, som ovan. Fungerar på 360 px.
   - **Tidsaxel**: **veckodagarna horisontellt, tiden lodrätt** — den form en vecka faktiskt har.
@@ -192,7 +192,7 @@ servern och en kodändring.
 | `barn` | namn, färg, sortering | Inställningar → Barn & familj |
 | `users` | de vuxna, från Google-profilen vid inloggning | Inloggningen, inte i appen |
 | `feeds` | adress, klubb, sport, barn, färg, samlingsmönster, **filter** | Inställningar → Flöden |
-| `lag` | lagkod → barn, sport, färg | Inställningar → Lag |
+| `lag` | lagkod → barn, sport, **klubb**, färg, titelregel | Inställningar → Lag |
 | `platser` | namn, adress, koordinater | Inställningar → Platser |
 
 De vuxna är redan data: `display_name` och `email` kommer från Google vid varje inloggning, och
@@ -680,11 +680,14 @@ sporterna i samma `.ics`:
 Alltså kan **ett flöde ge flera barn och flera sporter**, och en händelse hör inte hemma i flödet
 utan i laget. Modellen är därför:
 
-- `lag(kode, barn, sport, farg)` mappar lagkoden till barn och sport.
+- `lag(kode, barn, sport, klubb, monster)` mappar lagkoden till barn, sport och **förening**.
+  `barn` får vara tomt, vilket betyder "ärv källans barn" — rätt för en gemensam lagkalender.
 - `events.lag` plockas ur titeln med `lagUrTitel()`, som känner igen `F2016`, `P2015` och `U2015`.
 - `events.sport_titel` sätts när titeln själv anger sporten (`sportUrTitel()`), och vinner över
   lagets standard. Det är den enda rimliga vägen när samma lagkod har både bandy och innebandy.
-- Upplösningen blir `sport_titel → lag.sport → flödes.sport`, och `lag.barn → flödes.child`.
+- Upplösningen blir `sport_titel → lag.sport → flödes.sport`, `lag.barn → feed_barn`, och
+  `lag.klubb → källans klubb endast om källan har högst en klubb`. Sportadmins flöde har två
+  (Södra Ängby IF och SBBK), alltså ärvs ingen klubb där — pass utan lagkod visas utan förening.
 - API:t tar `?barn=Barn 1,Barn 2` och filtrerar på den upplösta barnkoden.
 
 Ett flöde vars titlar saknar lagkod faller tillbaka på flödets barn och sport. Det ska synas i
@@ -1093,7 +1096,7 @@ att du tittar själv:
      radbrytning, Latin-1-fallback.
    - samlingsregex mot verkliga beskrivningstexter, inklusive de som **inte** ska ge träff.
    - ISO-vecka vid årsskiftet: `v.1`, `v.53`, veckans start på måndag, och att
-     `Denna vecka`/`Nästa vecka` ger rätt intervall i december och januari.
+     `Aktuell vecka`/`Nästa vecka` ger rätt intervall i december och januari.
    - krockmodellen: överlapp, angränsande, glapp mindre än restid, samma plats, okänd plats,
      samma barn, olika barn, och de fem fallen i avsnitt 8.4.
    - restid: haversine mot kända avstånd, avrundning uppåt till 5 minuter.

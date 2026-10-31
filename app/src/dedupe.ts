@@ -5,9 +5,10 @@
  * flödena, därför normaliseras den hårt: gemener, utan diakriter, utan skiljetecken.
  */
 import { createHash } from "node:crypto";
+import { normaliseraPlats } from "./platser.ts";
 import { delar } from "./tid.ts";
 
-function normalisera(text: string): string {
+function normaliseraTitel(text: string): string {
   return text
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
@@ -22,6 +23,12 @@ export function fingerprint(titel: string, startMs: number, slutMs: number, plat
   // Starttiden är med, avrundad nedåt till kvart: två matcher samma dag på samma plats är olika
   // händelser, men en förening som rättar 10:00 till 10:05 ska inte ge en ny nyckel.
   const kvart = `${d.ar}-${d.manad}-${d.dag}T${String(d.timme).padStart(2, "0")}:${String(Math.floor(d.minut / 15) * 15).padStart(2, "0")}`;
-  const nyckel = [normalisera(titel), kvart, slutMs > 0 ? 1 : 0, normalisera(plats ?? "")].join("|");
+
+  // Längden i kvartar. Här stod tidigare konstanten 1, alltså samma värde för alla pass.
+  const kvartar = slutMs > startMs ? Math.round((slutMs - startMs) / (15 * 60_000)) : 0;
+
+  // Platsen normaliseras med samma regel som resten av appen, så att "Brommahallen plan 2" och
+  // "Brommahallen" ger samma nyckel.
+  const nyckel = [normaliseraTitel(titel), kvart, kvartar, normaliseraPlats(plats ?? "")].join("|");
   return createHash("sha1").update(nyckel).digest("hex").slice(0, 16);
 }

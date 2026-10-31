@@ -27,6 +27,7 @@ import {
   type Vuxen,
 } from "../api";
 import { Fel, Fält, Laddar, Tomt, Väljare } from "../komponenter";
+import { Hoger } from "../ikoner";
 import { datum } from "../tid";
 
 type Flik = "floden" | "lag" | "familj" | "sporter" | "platser";
@@ -61,7 +62,7 @@ export function Installningar({ version: _version, onÖppnaDolda }: VyProps & { 
           <span className="block text-meta text-dampad">Pass ni markerat ”Deltar ej” — ångra här</span>
         </span>
         <span aria-hidden className="text-dampad">
-          ›
+          <Hoger className="h-4 w-4" />
         </span>
       </button>
 
@@ -146,7 +147,7 @@ function Flodeskort({
 }) {
   const [barnVal, setBarnVal] = useState<string[]>(flode.barnLista);
   const [sport, setSport] = useState(flode.sport);
-  const [klubb, setKlubb] = useState(flode.klubb);
+
   const [etikett, setEtikett] = useState(flode.etikett);
   const [aktiv, setAktiv] = useState(flode.aktiv);
   const [nyUrl, setNyUrl] = useState("");
@@ -160,7 +161,6 @@ function Flodeskort({
       await sparaFlode(flode.id, {
         ...(barnVal.join(",") !== flode.barnLista.join(",") ? { barnLista: barnVal } : {}),
         ...(sport !== flode.sport ? { sport } : {}),
-        ...(klubb !== flode.klubb ? { klubb } : {}),
         ...(etikett !== flode.etikett ? { etikett } : {}),
         ...(aktiv !== flode.aktiv ? { aktiv } : {}),
         ...(filter.trim() !== (flode.filterMonster ?? "") ? { filterMonster: filter.trim() || null } : {}),
@@ -212,7 +212,7 @@ function Flodeskort({
         <div>
           <p className="text-titel font-bold">{flode.etikett}</p>
           <p className="text-meta text-dampad">
-            {flode.id} · {flode.antal} händelser · {flode.vard}
+            Källa: {flode.vard} · {flode.antal} händelser
           </p>
           <p className={`text-meta ${hälsa.klass}`}>{hälsa.text}</p>
         </div>
@@ -260,7 +260,6 @@ function Flodeskort({
           ]}
           onChange={setSport}
         />
-        <Fält etikett="Klubb" value={klubb} onChange={(e) => setKlubb(e.target.value)} />
         <Fält etikett="Etikett" value={etikett} onChange={(e) => setEtikett(e.target.value)} />
         <Fält
           etikett="Filter (titel, beskrivning eller kategori — tomt = allt)"
@@ -477,7 +476,11 @@ function Lagmappning({ onFel }: { onFel: (text: string | null) => void }) {
   }, [ladda]);
 
   const läggTill = async () => {
-    if (!kode.trim() || !barnVal) return;
+    if (!kode.trim()) return;
+    if (!klubb.trim()) {
+      onFel("Klubben krävs: utan den kan passet inte visa någon förening.");
+      return;
+    }
     try {
       await sparaLag(
         kode.trim().toUpperCase(),
@@ -511,7 +514,10 @@ function Lagmappning({ onFel }: { onFel: (text: string | null) => void }) {
         <Väljare
           etikett="Barn"
           värde={barnVal}
-          alternativ={barn.map((b) => ({ värde: b.namn, text: b.namn }))}
+          alternativ={[
+            { värde: "", text: "ärv källans barn" },
+            ...barn.map((b) => ({ värde: b.namn, text: b.namn })),
+          ]}
           onChange={setBarnVal}
         />
         <Väljare
@@ -521,7 +527,7 @@ function Lagmappning({ onFel }: { onFel: (text: string | null) => void }) {
           onChange={setSport}
         />
         <Fält
-          etikett="Klubb (lämna tom för flödets)"
+          etikett="Klubb (krävs — annars visas ingen förening)"
           placeholder="Södra Ängby IF"
           value={klubb}
           onChange={(e) => setKlubb(e.target.value)}
@@ -537,38 +543,58 @@ function Lagmappning({ onFel }: { onFel: (text: string | null) => void }) {
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-kant bg-bakgrund">
-        {lag.map((l) => (
-          <div key={l.kode} className="flex items-center gap-2 border-b border-kant/60 px-3 py-2 last:border-0">
-            <span className="w-16 shrink-0 text-titel font-bold">{l.kode}</span>
-            <span className="flex-1 text-brod">
-              {l.barn} · {l.sport}
-              {l.klubb && <span className="text-dampad"> · {l.klubb}</span>}
-              {l.monster && (
-                <span className="block text-meta text-dampad">regel: ”{l.monster}”</span>
-              )}
-            </span>
-            <span className={`text-meta ${l.antal === 0 ? "font-bold text-varning" : "text-dampad"}`}>
-              {l.antal === 0 ? "0 pass — matchar inget" : `${l.antal} pass`}
-            </span>
-            <button
-              type="button"
-              className="knapp !min-h-[36px] !px-2 !text-meta"
-              onClick={async () => {
-                try {
-                  await taBortLag(l.kode);
-                  await ladda();
-                } catch (e) {
-                  onFel(apiFelText(e));
-                }
-              }}
-            >
-              Ta bort
-            </button>
+      {lag.some((l) => !l.klubb) && (
+        <p className="mb-3 rounded-xl bg-varning/10 px-3 py-2 text-meta text-varning">
+          {lag.filter((l) => !l.klubb).length} lag saknar klubb. Deras pass visas utan förening —
+          fyll i klubb för att rätta det.
+        </p>
+      )}
+
+      {/* Grupperat per förening: det är klubben som skiljer lagen åt i samma källa. */}
+      {[...new Set(lag.map((l) => l.klubb ?? "Klubb saknas"))].map((klubb) => (
+        <div key={klubb} className="mb-3">
+          <h3 className="mb-1.5 px-1 text-meta font-bold uppercase tracking-wide text-dampad">
+            {klubb}
+          </h3>
+          <div className="overflow-hidden rounded-2xl border border-kant bg-bakgrund">
+            {lag
+              .filter((l) => (l.klubb ?? "Klubb saknas") === klubb)
+              .map((l) => (
+                <div key={l.kode} className="flex items-center gap-2 border-b border-kant/60 px-3 py-2 last:border-0">
+                  <span className="w-28 shrink-0 text-titel font-bold">{l.kode}</span>
+                  <span className="flex-1 text-brod">
+                    {l.barn ?? "ärver källans barn"} · {l.sport}
+                    {l.monster && (
+                      <span className="block text-meta text-dampad">regel: ”{l.monster}”</span>
+                    )}
+                  </span>
+                  <span className={`text-meta ${l.antal === 0 ? "font-bold text-varning" : "text-dampad"}`}>
+                    {l.antal === 0 ? "0 pass — matchar inget" : `${l.antal} pass`}
+                  </span>
+                  <button
+                    type="button"
+                    className="knapp !min-h-[36px] !px-2 !text-meta"
+                    onClick={async () => {
+                      try {
+                        await taBortLag(l.kode);
+                        await ladda();
+                      } catch (e) {
+                        onFel(apiFelText(e));
+                      }
+                    }}
+                  >
+                    Ta bort
+                  </button>
+                </div>
+              ))}
           </div>
-        ))}
-        {lag.length === 0 && <p className="px-3 py-4 text-meta text-dampad">Ingen mappning ännu.</p>}
-      </div>
+        </div>
+      ))}
+      {lag.length === 0 && (
+        <p className="rounded-2xl border border-dashed border-kant px-3 py-4 text-meta text-dampad">
+          Ingen mappning ännu.
+        </p>
+      )}
 
       <p className="mt-2 text-meta text-dampad">
         {utanLag} händelser saknar lagkod och visas med flödets barn och sport.

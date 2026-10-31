@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { VyProps } from "../App";
 import { apiFelText, kalenderlänk, hämtaPass, sparaÖverstyrning, type Passsvar } from "../api";
 import { Fel, Laddar, googleKalenderLänk } from "../komponenter";
+import { Vanster, Varning } from "../ikoner";
 import { datum, klockslag, veckodag } from "../tid";
 
 /**
@@ -72,14 +73,14 @@ export function Pass({
   return (
     <section className="pb-4">
       <button type="button" className="knapp mb-3 !min-h-[40px]" onClick={tillbaka}>
-        ‹ Tillbaka
+        <Vanster className="h-4 w-4" /> Tillbaka
       </button>
 
       <div className="rounded-2xl border border-kant bg-bakgrund p-4" style={{ borderLeft: `5px solid ${h.farg}` }}>
         <p className="text-meta font-semibold uppercase tracking-wide text-dampad">
-          {h.barn.join(" & ")} · {h.klubb} · {h.sport}
+          {[h.barn.join(" & "), h.klubb, h.sport].filter(Boolean).join(" · ")}
         </p>
-        <h1 className={`mt-1 text-lg font-bold leading-tight ${h.status === "CANCELLED" ? "line-through opacity-60" : ""}`}>
+        <h1 className={`mt-1 text-rubrik font-bold leading-tight ${h.status === "CANCELLED" ? "line-through opacity-60" : ""}`}>
           {h.titel}
         </h1>
 
@@ -142,7 +143,8 @@ export function Pass({
 
         {h.krock && (
           <div className="mt-3 rounded-xl bg-varning/10 px-3 py-2">
-            <p className="text-meta font-semibold text-varning">
+            <p className="flex items-center gap-1.5 text-meta font-semibold text-varning">
+              <Varning className="h-3.5 w-3.5 shrink-0" />
               {h.krock.sammaBarn
                 ? "Dubbelbokat för samma barn"
                 : h.krock.typ === "tid"

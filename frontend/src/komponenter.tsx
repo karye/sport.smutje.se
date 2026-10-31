@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import type { Handelse } from "./api";
+import { Flagga, SportIkon, Stang, Varning } from "./ikoner";
 import { kalenderstämpel, klockslag } from "./tid";
 
 /**
@@ -95,8 +96,8 @@ export function Ark({
       >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-kant bg-bakgrund px-4 py-3">
           <h2 className="text-titel font-semibold">{rubrik}</h2>
-          <button type="button" className="knapp" onClick={onStang}>
-            Klar
+          <button type="button" className="knapp !min-h-[36px] !px-2" aria-label="Stäng" onClick={onStang}>
+            <Stang className="h-4 w-4" />
           </button>
         </div>
         <div className="px-4 py-3">{children}</div>
@@ -154,9 +155,9 @@ export function Chips({
 }: {
   val: Set<string>;
   onChange: (ny: Set<string>) => void;
-  grupper: { namn: string; färg?: string }[];
+  grupper: { namn: string; färg?: string; ikon?: ReactNode }[];
   /** Ett filter som inte är ett namn, till exempel "saknar ansvarig". Ligger i samma rad. */
-  extra?: { text: string; på: boolean; växla: () => void };
+  extra?: { text: string; på: boolean; växla: () => void; ikon?: ReactNode };
 }) {
   const växla = (namn: string) => {
     const ny = new Set(val);
@@ -186,6 +187,7 @@ export function Chips({
             extra.på ? "border-varning bg-varning/15 text-varning" : "border-kant bg-bakgrund text-dampad"
           }`}
         >
+          {extra.ikon}
           {extra.text}
         </button>
       )}
@@ -200,7 +202,8 @@ export function Chips({
               på ? "border-text bg-text text-bakgrund" : "border-kant bg-bakgrund"
             }`}
           >
-            {g.färg && (
+            {g.ikon}
+            {!g.ikon && g.färg && (
               <span
                 aria-hidden
                 className="inline-block h-2 w-2 rounded-full"
@@ -230,6 +233,10 @@ export function Kort({
 }) {
   const inställd = h.status === "CANCELLED";
   const krock = h.krock;
+
+  // Föreningarna delar ibland upp en cup i dygnsblock: 00:00 till 23:59. Tiderna är bokstavligt
+  // sanna men säger ingenting — visa "Heldag" i stället.
+  const heldag = h.heldag || (klockslag(h.start) === "00:00" && klockslag(h.slut) === "23:59");
   const ansvarigText =
     h.ansvarig.typ === "person"
       ? (h.ansvarigNamn ?? vuxna.find((v) => v.id === h.ansvarig.user_id)?.namn ?? "Okänd")
@@ -267,9 +274,13 @@ export function Kort({
       <div className="pointer-events-none relative z-10 flex min-w-0 flex-1 items-start justify-between gap-3 py-2.5 pl-3 pr-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-titel font-bold tabular-nums">
-              {klockslag(h.start)}–{klockslag(h.slut)}
-            </span>
+            {heldag ? (
+              <span className="text-titel font-bold">Heldag</span>
+            ) : (
+              <span className="text-titel font-bold tabular-nums">
+                {klockslag(h.start)}–{klockslag(h.slut)}
+              </span>
+            )}
             {h.flerdygn && <span className="text-meta text-dampad">flera dagar</span>}
             {inställd && (
               <span className="rounded bg-fel/10 px-1.5 py-0.5 text-meta font-semibold text-fel">Inställt</span>
@@ -281,7 +292,8 @@ export function Kort({
               </span>
             )}
             {krock && (
-              <span className="rounded bg-varning/15 px-1.5 py-0.5 text-meta font-semibold text-varning">
+              <span className="inline-flex items-center gap-1 rounded bg-varning/15 px-1.5 py-0.5 text-meta font-semibold text-varning">
+                {krock.olost && <Varning className="h-3.5 w-3.5 shrink-0" />}
                 {krock.sammaBarn ? "Dubbelbokat" : null}
                 {!krock.sammaBarn && krock.typ === "tid"
                   ? `${Math.abs(krock.glappMin)} min överlapp`
@@ -298,11 +310,9 @@ export function Kort({
             {h.titel}
           </p>
           <p className="flex items-center gap-1.5 text-meta text-dampad">
-            <span
-              aria-hidden
-              className="inline-block h-2 w-2 shrink-0 rounded-full"
-              style={{ background: h.sportFarg ?? "transparent", border: h.sportFarg ? "none" : "1px solid currentColor" }}
-            />
+            <span style={{ color: h.sportFarg ?? "currentColor" }} className="shrink-0">
+              <SportIkon sport={h.sport} className="h-3.5 w-3.5" title={h.sport === "okänd" ? "sport okänd" : h.sport} />
+            </span>
             <span className="truncate">
               {[h.barn.join(" & "), h.sport === "okänd" ? null : h.sport, h.klubb, h.plats ?? "plats saknas"]
                 .filter(Boolean)
@@ -323,7 +333,12 @@ export function Kort({
             onAnsvarig();
           }}
         >
-          {ansvarigText ?? "Vem skjutsar?"}
+          {ansvarigText ?? (
+            <>
+              <Flagga className="h-3.5 w-3.5" />
+              Vem skjutsar?
+            </>
+          )}
         </button>
       </div>
     </div>

@@ -30,7 +30,8 @@ export interface Handelse {
   sport: string;
   /** Sportens egen färg, som liten prick. Barnets färg är fortfarande listen på kortet. */
   sportFarg: string | null;
-  klubb: string;
+  /** Föreningen, från laget. Null när laget saknar klubb — då visas ingen, aldrig en gissning. */
+  klubb: string | null;
   farg: string;
   start: number;
   slut: number;
@@ -83,7 +84,8 @@ export interface Flode {
   barn: string;
   barnLista: string[];
   sport: string;
-  klubb: string;
+  /** Föreningen, från laget. Null när laget saknar klubb — då visas ingen, aldrig en gissning. */
+  klubb: string | null;
   etikett: string;
   farg: string;
   aktiv: boolean;
@@ -223,7 +225,8 @@ export const testaFlode = (
 export interface NyttFlode {
   url: string;
   etikett: string;
-  klubb: string;
+  /** Föreningen, från laget. Null när laget saknar klubb — då visas ingen, aldrig en gissning. */
+  klubb: string | null;
   sport: string;
   barnLista: string[];
   filterMonster?: string | null;
@@ -242,6 +245,7 @@ export const hämtaLag = (): Promise<{ lag: Lag[]; utanLag: number }> => hämta(
 
 export const sparaLag = (
   kode: string,
+  /** Tom sträng = ärv källans barn. */
   barn: string,
   sport: string,
   farg: string | null,

@@ -15,6 +15,7 @@ import {
   type Vuxen,
 } from "./api";
 import { Ark, Chips, Fel, googleKalenderLänk } from "./komponenter";
+import { Flagga, SportIkon, Uppdatera, Vanster } from "./ikoner";
 import { dagNyckel, isoVecka, klockslag, sedan, tillStockholmMs, veckodag } from "./tid";
 import { Vecka } from "./vyer/Vecka";
 import { Manad } from "./vyer/Manad";
@@ -362,7 +363,7 @@ export function App() {
                 aria-label="Tillbaka till kalendern"
                 onClick={tillbaka}
               >
-                ‹
+                <Vanster className="h-4 w-4" />
               </button>
             )}
             <span className="truncate text-titel font-bold">
@@ -413,7 +414,7 @@ export function App() {
                 }
               }}
             >
-              <span className={hämtar ? "inline-block animate-spin" : "inline-block"}>↻</span>
+              <Uppdatera className={`h-4 w-4 ${hämtar ? "animate-spin" : ""}`} />
             </button>
 
           </div>
@@ -424,10 +425,20 @@ export function App() {
             onChange={setValda}
             grupper={[
               ...barn.map((b) => ({ namn: b.namn, färg: b.farg })),
-              ...sporter.filter((s) => s.antal > 0).map((s) => ({ namn: s.namn, färg: s.farg })),
+              ...sporter
+                .filter((s) => s.antal > 0)
+                .map((s) => ({
+                  namn: s.namn,
+                  ikon: (
+                    <span style={{ color: s.farg }}>
+                      <SportIkon sport={s.namn} className="h-3.5 w-3.5" />
+                    </span>
+                  ),
+                })),
             ]}
             extra={{
-              text: "⚑ Saknar ansvarig",
+              text: "Saknar ansvarig",
+              ikon: <Flagga className="h-3.5 w-3.5" />,
               på: utanAnsvarig,
               växla: () => setUtanAnsvarig((v) => !v),
             }}

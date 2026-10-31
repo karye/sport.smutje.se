@@ -1,17 +1,16 @@
 [Unit]
-Description=Familjekalender sport.smutje.se (Bun)
-After=network.target
+Description=sport.smutje.se (Bun)
+After=network-online.target
 
 [Service]
-User=pi
-Group=pi
+# Användar-unit: körs som pi och startas utan sudo, som be.smutje.se och classroom-app.
+# Ingen User=/Group= — en användar-unit kör alltid som sin ägare.
+# Linger är påslaget för pi, alltså startar den vid boot utan inloggning.
 WorkingDirectory=/var/www/sport.smutje.se/app
 EnvironmentFile=/var/www/sport.smutje.se/.env
 ExecStart=/home/pi/.nvm/versions/node/v26.0.0/bin/bun run src/index.ts
 Restart=always
 RestartSec=3
-PrivateTmp=true
-NoNewPrivileges=true
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

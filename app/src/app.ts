@@ -8,7 +8,7 @@
  * ingen del av appen ska vara läsbar utan konto.
  */
 import { Elysia } from "elysia";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { db } from "./db.ts";
 import { ZON } from "./tid.ts";
 import { ärKonfigurerad } from "./auth.ts";
@@ -18,7 +18,13 @@ import { inloggningsRutter } from "./rutter/inloggning.ts";
 import { handelseRutter } from "./rutter/handelser.ts";
 import { installningsRutter } from "./rutter/installningar.ts";
 
-const PUBLIC_DIR: string = join(import.meta.dir, "..", "public");
+const PUBLIC_DIR: string = resolve(join(import.meta.dir, "..", "public"));
+
+/**
+ * Filer som måste nås utan inloggning, annars kan appen inte installeras på hemskärmen: webbläsaren
+ * hämtar manifestet och service workern innan den har en session, och får annars loginsidan.
+ */
+const ÖPPNA_FILER = new Set(["/manifest.webmanifest", "/sw.js", "/ikon.svg", "/favicon.ico"]);
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -54,7 +60,11 @@ export function skapaApp() {
       const url = new URL(request.url);
       const anvandare = inloggad(request);
 
-      if (!anvandare) {
+      // Manifest och service worker måste nås utan session, annars kan appen inte installeras på
+      // hemskärmen: webbläsaren hämtar dem innan den har en kaka.
+      const öppenFil = ÖPPNA_FILER.has(url.pathname);
+
+      if (!anvandare && !öppenFil) {
         if (url.pathname.startsWith("/api/")) return krävsApi();
         return inloggningsSida(ärKonfigurerad().saknas);
       }
@@ -65,7 +75,15 @@ export function skapaApp() {
       const relativ = decodeURIComponent(url.pathname).replace(/^\/+/, "");
 
       if (relativ) {
-        const fil = Bun.file(join(PUBLIC_DIR, relativ));
+        // Skydd mot att klättra ut ur public/. `new URL()` normaliserar %2e%2e men inte kodade
+        // snedstreck, så "/..%2f..%2f.env" blir "../../.env" först efter avkodningen. Utan den
+        // här kontrollen serveras .env och databasen till varje inloggad klient.
+        const fullVäg = resolve(PUBLIC_DIR, relativ);
+        if (fullVäg !== PUBLIC_DIR && !fullVäg.startsWith(PUBLIC_DIR + sep)) {
+          return new Response("Förbjuden", { status: 403 });
+        }
+
+        const fil = Bun.file(fullVäg);
         if (await fil.exists()) {
           const ändelse = relativ.slice(relativ.lastIndexOf(".")).toLowerCase();
           return new Response(fil, {
@@ -84,13 +102,16 @@ export function skapaApp() {
         });
       }
 
+      // Reserv när frontendbygget saknas. `anvandare` kan vara null här om bara manifestet
+      // efterfrågas utan session, och då finns inget namn att hälsa med.
+      if (!anvandare) return new Response("Finns inte", { status: 404 });
+
       return sida({
         rubrik: `Hej ${escapar(anvandare.display_name)}`,
         underrubrik: `Inloggad som ${escapar(anvandare.email)} · ${anvandare.roll}`,
         noCache: true,
         innehall: `<p>Inloggningen, databasen, tolken och krockberäkningen är klara och testade.
           Gränssnittet är nästa steg.</p>
-          <p>Vecka och månad byggs i React och serveras härifrån när de finns.</p>
           <p class="knapprad"><a class="knapp sekundar" href="/auth/logout">Logga ut</a></p>`,
       });
     })

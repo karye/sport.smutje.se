@@ -11,6 +11,7 @@ dist/
 
 # Utdrag av källkoden gjorda för att klistras in någon annanstans — inte källa.
 ts_*.txt
+del/
 
 # Bun och editor
 *.lockb

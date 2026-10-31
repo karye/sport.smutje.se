@@ -140,9 +140,12 @@ export const installningsRutter = new Elysia()
     if (grind instanceof Response) return grind;
 
     const namn = decodeURIComponent(params.namn);
+    // feed_barn är den koppling som faktiskt styr vilka barn ett flöde gäller. Utan den här raden
+    // gick det att radera ett barn som låg som andra barn på ett delat flöde.
     const används =
       (db.query<{ n: number }, [string]>("SELECT COUNT(*) AS n FROM lag WHERE barn = ?").get(namn)?.n ?? 0) +
-      (db.query<{ n: number }, [string]>("SELECT COUNT(*) AS n FROM feeds WHERE child = ?").get(namn)?.n ?? 0);
+      (db.query<{ n: number }, [string]>("SELECT COUNT(*) AS n FROM feeds WHERE child = ?").get(namn)?.n ?? 0) +
+      (db.query<{ n: number }, [string]>("SELECT COUNT(*) AS n FROM feed_barn WHERE barn = ?").get(namn)?.n ?? 0);
 
     if (används > 0) return Response.json({ fel: `${namn} används av ${används} flöden eller lag` }, { status: 409 });
 
@@ -416,13 +419,20 @@ export const installningsRutter = new Elysia()
     const kode = somText(kropp?.kode)?.toUpperCase();
     const barn = somText(kropp?.barn);
     const sport = somText(kropp?.sport);
-    if (!kode || !barn || !sport) return Response.json({ fel: "kode, barn och sport krävs" }, { status: 400 });
+    const klubb = somText(kropp?.klubb);
+
+    // Klubben hör till laget. Utan den kan passet inte visa någon förening alls, och då är
+    // mappningen halvfärdig — hellre ett tydligt fel här än tysta kort utan förening.
+    if (!kode || !sport || !klubb) {
+      return Response.json({ fel: "kode, sport och klubb krävs" }, { status: 400 });
+    }
 
     db.run(
       `INSERT INTO lag (kode, barn, sport, farg, klubb, monster) VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(kode) DO UPDATE SET barn = excluded.barn, sport = excluded.sport,
          farg = excluded.farg, klubb = excluded.klubb, monster = excluded.monster`,
-      [kode, barn, sport, somText(kropp?.farg), somText(kropp?.klubb), somText(kropp?.monster)]
+      // barn = null betyder "ärv källans barn", som för en gemensam lagkalender.
+      [kode, barn, sport, somText(kropp?.farg), klubb, somText(kropp?.monster)]
     );
 
     // Reglerna kan ha ändrats, alltså måste händelserna kopplas om — annars slår en ny regel

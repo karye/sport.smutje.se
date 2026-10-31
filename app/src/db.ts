@@ -72,6 +72,38 @@ läggTill("events", "lag", "TEXT");
 läggTill("lag", "klubb", "TEXT");
 // Migrering 3: lag som saknar kod i titeln ("SBBK Flickor") behöver en egen regel.
 läggTill("lag", "monster", "TEXT");
+/**
+ * Migrering 5: klubben hör till laget, inte till flödet — och ett lag kan gälla källans barn.
+ *
+ * Sportadmins flöde innehåller två klubbar (Södra Ängby IF och SBBK). Att ärva klubben från
+ * flödet gav SBBK på Södra Ängbys pass. `barn` måste samtidigt kunna vara NULL, eftersom en
+ * gemensam kalender (Hammarbys Flickor Mellan) gäller flera barn — då ärvs de från feed_barn.
+ *
+ * SQLite kan inte lossa NOT NULL på en kolumn, alltså byggs tabellen om.
+ */
+function migreraLagKlubb(): void {
+  const kolumner = db.query<{ name: string; notnull: number }, []>("PRAGMA table_info(lag)").all();
+  const barnÄrObligatorisk = kolumner.some((k) => k.name === "barn" && k.notnull === 1);
+  if (!barnÄrObligatorisk) return;
+
+  db.exec(`
+    CREATE TABLE lag_ny (
+      kode    TEXT PRIMARY KEY,
+      barn    TEXT,
+      sport   TEXT NOT NULL,
+      farg    TEXT,
+      klubb   TEXT,
+      kommentar TEXT,
+      monster TEXT
+    );
+    INSERT INTO lag_ny (kode, barn, sport, farg, klubb, kommentar, monster)
+      SELECT kode, barn, sport, farg, klubb, kommentar, monster FROM lag;
+    DROP TABLE lag;
+    ALTER TABLE lag_ny RENAME TO lag;
+  `);
+}
+migreraLagKlubb();
+
 // Migrering 4: ett flöde kan vara hela föreningens kalender. Då behövs ett filter per flöde.
 läggTill("feeds", "filter_monster", "TEXT");
 läggTill("events", "sport_titel", "TEXT");

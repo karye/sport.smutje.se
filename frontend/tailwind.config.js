@@ -21,6 +21,8 @@ export default {
         meta: ["0.75rem", { lineHeight: "1rem" }],
         brod: ["0.875rem", { lineHeight: "1.35rem" }],
         titel: ["0.9375rem", { lineHeight: "1.25rem" }],
+        // En nivå över titeln, så att veckonummer, månadsnamn och sidrubriker får kontrast.
+        rubrik: ["1.125rem", { lineHeight: "1.5rem" }],
       },
     },
   },

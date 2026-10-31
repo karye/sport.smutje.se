@@ -313,7 +313,12 @@ describe("inställningarna", () => {
   });
 
   test("lagmappningen går att lägga till, lista och ta bort", async () => {
-    expect((await skriv("/api/lag", "POST", { kode: "u2015", barn: "Barn 1", sport: "bandy" })).status).toBe(200);
+    // Utan klubb är mappningen halvfärdig: passet skulle visas utan förening.
+    expect((await skriv("/api/lag", "POST", { kode: "u2015", barn: "Barn 1", sport: "bandy" })).status).toBe(400);
+
+    expect(
+      (await skriv("/api/lag", "POST", { kode: "u2015", barn: "Barn 1", sport: "bandy", klubb: "SBBK" })).status
+    ).toBe(200);
 
     const svarLista = (await (await hämta("/api/lag", kaka())).json()) as {
       lag: { kode: string; barn: string; antal: number }[];
@@ -484,5 +489,153 @@ describe("överstyrningar och kalenderfil", () => {
     expect(text.match(/BEGIN:VEVENT/g)?.length).toBe(2);
     expect(text).toContain("SUMMARY:Samling");
     expect(text).toContain("RELATED-TO");
+  });
+});
+
+describe("säkerhet i den statiska filservern", () => {
+  const kaka = () => sessionFör("foralder1@example.com");
+
+  test("att klättra ut ur public/ avvisas", async () => {
+    // Kodade snedstreck klarar sig förbi URL-normaliseringen, så avkodningen skapar "../".
+    for (const väg of ["/..%2f..%2f.env", "/%2e%2e%2f%2e%2e%2fapp%2fdata%2fsport.sqlite"]) {
+      const svar = await hämta(väg, kaka());
+      expect(svar.status).toBe(403);
+      const text = await svar.text();
+      expect(text).not.toContain("SESSION_SECRET");
+      expect(text).not.toContain("SQLite format");
+    }
+  });
+
+  test("manifest och service worker nås utan inloggning", async () => {
+    // Utan detta får webbläsaren loginsidans HTML i stället för manifestet vid installation.
+    for (const väg of ["/manifest.webmanifest", "/sw.js", "/ikon.svg"]) {
+      const svar = await hämta(väg);
+      expect([200, 404]).toContain(svar.status);
+      expect(svar.headers.get("content-type") ?? "").not.toContain("text/html");
+    }
+  });
+});
+
+describe("dubbletter mellan flöden", () => {
+  const kaka = () => sessionFör("foralder1@example.com");
+  const FRAN = Date.UTC(2026, 10, 1);
+  const TILL = Date.UTC(2026, 11, 1);
+
+  test("samma pass i två flöden blir ett kort med båda barnen och utan falsk krock", async () => {
+    // Två flöden med var sitt barn, och samma pass i båda. Det är så en match kan dyka upp
+    // två gånger: barnets eget flöde och lagets.
+    db.run(
+      "INSERT OR IGNORE INTO feeds (id, child, sport, club, label, color, url) VALUES ('test-dubb', 'Barn 1', 'bandy', 'SBBK', 'Dubb', '#1d4ed8', 'https://example.test/dubb.ics')"
+    );
+    db.run("DELETE FROM feed_barn WHERE feed_id IN ('test-dubb', 'test-server')");
+    db.run("INSERT INTO feed_barn (feed_id, barn) VALUES ('test-dubb', 'Barn 1')");
+    db.run("INSERT INTO feed_barn (feed_id, barn) VALUES ('test-server', 'Barn 2')");
+
+    const { tolkaFlode } = await import("../src/tolk.ts");
+    const { sparaHandelser } = await import("../src/lagring.ts");
+    const ics = await Bun.file(FIXTURE).text();
+
+    // Samma flöde två gånger: identiska rader, alltså samma fingerprint men olika feed_id.
+    const resultat = tolkaFlode(
+      ics,
+      { id: "test-dubb", label: "Dubb", samling_monster: null },
+      { fran: FRAN, till: TILL }
+    );
+    sparaHandelser("test-dubb", resultat.handelser, Date.now());
+
+    const kropp = (await (
+      await hämta(`/api/events?from=${FRAN}&to=${TILL}`, kaka())
+    ).json()) as { handelser: { titel: string; barn: string[]; floden: string[]; krock: unknown }[] };
+
+    const match = kropp.handelser.filter((h) => h.titel === "Match: SBBK P16 - Hammarby IF");
+    expect(match).toHaveLength(1);
+    expect([...(match[0]?.barn ?? [])].sort()).toEqual(["Barn 2", "Barn 1"]);
+    expect([...(match[0]?.floden ?? [])].sort()).toEqual(["test-dubb", "test-server"]);
+    // Kopian får inte krocka med sig själv.
+    expect(match[0]?.krock).toBeNull();
+  });
+});
+
+describe("klubben hör till laget", () => {
+  const kaka = () => sessionFör("foralder1@example.com");
+  const FRAN = Date.UTC(2026, 10, 1);
+  const TILL = Date.UTC(2026, 11, 1);
+
+  test("två klubbar i samma källa ger rätt förening per lag", async () => {
+    // Källan har klubb "SBBK" sedan tidigare. Laget hör till Södra Ängby IF, och laget ska vinna.
+    const { tolkaFlode } = await import("../src/tolk.ts");
+    const { sparaHandelser } = await import("../src/lagring.ts");
+
+    db.run(
+      "INSERT OR REPLACE INTO lag (kode, barn, sport, klubb) VALUES ('F2016', 'Barn 2', 'fotboll', 'Södra Ängby IF')"
+    );
+
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "BEGIN:VEVENT",
+      "UID:fotboll-1@x",
+      "DTSTART;TZID=Europe/Stockholm:20261110T180000",
+      "DTEND;TZID=Europe/Stockholm:20261110T193000",
+      "SUMMARY:Träning - F2016 Gul",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\n");
+
+    const r = tolkaFlode(
+      ics,
+      { id: "test-server", label: "Test", samling_monster: null },
+      { fran: FRAN, till: TILL }
+    );
+    sparaHandelser("test-server", r.handelser, Date.now());
+
+    const kropp = (await (
+      await hämta(`/api/events?from=${FRAN}&to=${TILL}`, kaka())
+    ).json()) as { handelser: { titel: string; klubb: string | null; lag: string | null }[] };
+
+    const fotboll = kropp.handelser.find((h) => h.titel === "Träning - F2016 Gul");
+    expect(fotboll?.lag).toBe("F2016");
+    expect(fotboll?.klubb).toBe("Södra Ängby IF");
+  });
+
+  test("när källan har två klubbar ärvs ingen av dem", async () => {
+    // Samma källa får ett lag i den andra klubben, alltså två klubbar totalt. Då kan flödets
+    // egen etikett inte längre användas som reserv — pass utan lagkod visas utan förening.
+    const { tolkaFlode } = await import("../src/tolk.ts");
+    const { sparaHandelser } = await import("../src/lagring.ts");
+
+    db.run("INSERT OR REPLACE INTO lag (kode, barn, sport, klubb) VALUES ('U2015', 'Barn 1', 'bandy', 'SBBK')");
+
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "BEGIN:VEVENT",
+      "UID:bandy-1@x",
+      "DTSTART;TZID=Europe/Stockholm:20261112T180000",
+      "DTEND;TZID=Europe/Stockholm:20261112T193000",
+      "SUMMARY:Träning - U2015",
+      "END:VEVENT",
+      "BEGIN:VEVENT",
+      "UID:utan-lag@x",
+      "DTSTART;TZID=Europe/Stockholm:20261113T180000",
+      "DTEND;TZID=Europe/Stockholm:20261113T193000",
+      "SUMMARY:Föreningsfest",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\n");
+
+    const r = tolkaFlode(
+      ics,
+      { id: "test-server", label: "Test", samling_monster: null },
+      { fran: FRAN, till: TILL }
+    );
+    sparaHandelser("test-server", r.handelser, Date.now());
+
+    const kropp = (await (
+      await hämta(`/api/events?from=${FRAN}&to=${TILL}`, kaka())
+    ).json()) as { handelser: { titel: string; lag: string | null; klubb: string | null }[] };
+
+    expect(kropp.handelser.find((h) => h.titel === "Träning - U2015")?.klubb).toBe("SBBK");
+    expect(kropp.handelser.find((h) => h.titel === "Föreningsfest")?.klubb).toBeNull();
   });
 });

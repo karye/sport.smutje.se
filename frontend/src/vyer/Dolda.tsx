@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { VyProps } from "../App";
 import { apiFelText, delaId, hämtaDolda, sparaÖverstyrning, type Handelse } from "../api";
+import { Vanster } from "../ikoner";
 import { Fel, Laddar, Tomt } from "../komponenter";
 import { datum, klockslag, veckodag } from "../tid";
 
@@ -44,10 +45,10 @@ export function Dolda({ navigera, onÄndrad }: VyProps & { onÄndrad?: () => voi
   return (
     <section className="pb-4">
       <button type="button" className="knapp mb-3 !min-h-[40px]" onClick={() => navigera("/installningar")}>
-        ‹ Tillbaka
+        <Vanster className="h-4 w-4" /> Tillbaka
       </button>
 
-      <h1 className="mb-1 text-lg font-bold">Dolda pass</h1>
+      <h1 className="mb-1 text-rubrik font-bold">Dolda pass</h1>
       <p className="mb-3 text-meta text-dampad">
         Pass ni markerat med <span className="font-semibold">Deltar ej</span>. De syns inte i veckan
         eller månaden och räknas inte som krockar.

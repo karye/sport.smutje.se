@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { VyProps } from "../App";
 import { Fel, Kort, Laddar } from "../komponenter";
+import { Hoger, Vanster, Varning } from "../ikoner";
 import { useHändelser } from "../useHändelser";
 import {
   dagINumma,
@@ -13,11 +14,18 @@ import {
   klockslag,
   månadsSpann,
   datum,
-  veckodagKort,
 } from "../tid";
 import type { Handelse } from "../api";
 
 const VECKODAGAR = ["mån", "tis", "ons", "tor", "fre", "lör", "sön"];
+
+/** Dagens datum om månaden är innevarande, annars den 1:a. */
+function standardDag(år: number, månad: number): number {
+  const första = lokalMidnatt(år, månad, 1);
+  const sista = lokalMidnatt(år, månad, new Date(Date.UTC(år, månad, 0)).getUTCDate());
+  const nu = Date.now();
+  return nu >= första && nu <= sista ? nu : första;
+}
 
 export function Manad({ param, navigera, filter, onAnsvarig, vuxna, version }: VyProps & { param?: string }) {
   const { år, månad } = månadFrånParam(param);
@@ -44,11 +52,13 @@ export function Manad({ param, navigera, filter, onAnsvarig, vuxna, version }: V
   }, [valda]);
 
   // Vald dag hålls som tidpunkt, inte som sträng: då slipper jämförelsen tolka datumformat.
-  const [valdDag, setValdDag] = useState<number>(() => {
-    const första = lokalMidnatt(år, månad, 1);
-    const sista = lokalMidnatt(år, månad, new Date(Date.UTC(år, månad, 0)).getUTCDate());
-    return nu >= första && nu <= sista ? nu : första;
-  });
+  const [valdDag, setValdDag] = useState<number>(() => standardDag(år, månad));
+
+  // Byter man månad måste den valda dagen följa med, annars visar listan under rutnätet en dag
+  // från föregående månad.
+  useEffect(() => {
+    setValdDag(standardDag(år, månad));
+  }, [år, månad]);
 
   const flerdygn = valda.filter((h) => h.flerdygn);
   const dagens = perDag.get(dagNyckel(valdDag)) ?? [];
@@ -76,11 +86,13 @@ export function Manad({ param, navigera, filter, onAnsvarig, vuxna, version }: V
     <section>
       <div className="mb-2 flex items-center gap-2">
         <button type="button" className="knapp !min-h-[40px] !px-3" aria-label="Föregående månad" onClick={() => navigera(flyttaMånad(-1))}>
-          ‹
+          <Vanster className="h-4 w-4" />
         </button>
-        <div className="flex-1 text-center text-titel font-bold capitalize">{månadOchÅr(lokalMidnatt(år, månad, 15))}</div>
+        <div className="flex-1 text-center text-rubrik font-bold capitalize">
+          {månadOchÅr(lokalMidnatt(år, månad, 15))}
+        </div>
         <button type="button" className="knapp !min-h-[40px] !px-3" aria-label="Nästa månad" onClick={() => navigera(flyttaMånad(1))}>
-          ›
+          <Hoger className="h-4 w-4" />
         </button>
       </div>
 
@@ -104,7 +116,7 @@ export function Manad({ param, navigera, filter, onAnsvarig, vuxna, version }: V
       {!laddar && !fel && (
         <>
           <div className="overflow-hidden rounded-xl border border-kant bg-bakgrund">
-            <div className="grid grid-cols-[2.25rem_repeat(7,1fr)] border-b border-kant bg-sida">
+            <div className="grid grid-cols-[2.25rem_repeat(7,minmax(0,1fr))] border-b border-kant bg-sida">
               <div className="px-1 py-1.5" />
               {VECKODAGAR.map((d) => (
                 <div key={d} className="px-1 py-1.5 text-center text-meta font-semibold text-dampad">
@@ -118,7 +130,7 @@ export function Manad({ param, navigera, filter, onAnsvarig, vuxna, version }: V
               const måndag = veckodagar[0] ?? spann.dagar[0] ?? Date.now();
               const { vecka } = isoVecka(måndag);
               return (
-                <div key={rad} className="grid grid-cols-[2.25rem_repeat(7,1fr)] border-b border-kant/60 last:border-0">
+                <div key={rad} className="grid grid-cols-[2.25rem_repeat(7,minmax(0,1fr))] border-b border-kant/60 last:border-0">
                   <div className="flex items-start justify-center px-1 pt-1 text-meta text-dampad">v.{vecka}</div>
                   {veckodagar.map((dag) => {
                     const nyckel = dagNyckel(dag);
@@ -132,7 +144,7 @@ export function Manad({ param, navigera, filter, onAnsvarig, vuxna, version }: V
                         key={nyckel}
                         type="button"
                         onClick={() => setValdDag(dag)}
-                        className={`flex min-h-[56px] flex-col items-stretch gap-1 border-l border-kant/60 px-1 pb-1 pt-0.5 text-left lg:min-h-[96px] lg:px-1.5 ${
+                        className={`flex min-h-[56px] min-w-0 flex-col items-stretch gap-1 overflow-hidden border-l border-kant/60 px-1 pb-1 pt-0.5 text-left lg:min-h-[96px] lg:px-1.5 ${
                           vald ? "bg-sida" : ""
                         } ${iMånaden ? "" : "opacity-40"}`}
                         aria-label={`${datum(dag)}${lista.length > 0 ? `, ${lista.length} pass` : ""}`}
@@ -142,11 +154,15 @@ export function Manad({ param, navigera, filter, onAnsvarig, vuxna, version }: V
                           <span className={`${ärIdag ? "font-bold text-primar" : ""}`}>
                             {ärIdag ? "Idag" : dagINumma(dag)}
                           </span>
-                          {olöst && <span aria-label="olöst krock" className="text-varning">⚠</span>}
+                          {olöst && (
+                            <span className="text-varning" title="olöst krock">
+                              <Varning className="h-3.5 w-3.5" />
+                            </span>
+                          )}
                         </span>
                         <span className="grid gap-0.5">
                           {lista.slice(0, 3).map((h) => (
-                            <span key={h.id}>
+                            <span key={h.id} className="min-w-0">
                               {/* Mobil: ett streck räcker som täthetsindikator. */}
                               <span
                                 className="block h-1.5 rounded-full lg:hidden"
@@ -154,11 +170,13 @@ export function Manad({ param, navigera, filter, onAnsvarig, vuxna, version }: V
                               />
                               {/* Desktop: tid och aktivitet, som i en riktig kalender. */}
                               <span
-                                className="hidden items-center gap-1 overflow-hidden rounded px-1 py-0.5 text-[11px] font-semibold leading-tight text-white lg:flex"
+                                className="hidden min-w-0 items-center gap-1 overflow-hidden rounded px-1 py-0.5 text-[11px] font-semibold leading-tight text-white lg:flex"
                                 style={{ background: h.farg }}
                                 title={h.titel}
                               >
-                                <span className="shrink-0 tabular-nums">{klockslag(h.start)}</span>
+                                <span className="shrink-0 tabular-nums">
+                                  {h.heldag || klockslag(h.start) === "00:00" ? "Heldag" : klockslag(h.start)}
+                                </span>
                                 <span className="truncate">{h.titel}</span>
                               </span>
                             </span>
@@ -187,7 +205,6 @@ export function Manad({ param, navigera, filter, onAnsvarig, vuxna, version }: V
           )}
         </>
       )}
-      <p className="mt-4 text-meta text-dampad">{veckodagKort(nu)} · veckonummer enligt ISO</p>
     </section>
   );
 }

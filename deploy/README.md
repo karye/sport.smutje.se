@@ -45,14 +45,31 @@ sudo apache2ctl configtest && sudo systemctl reload apache2
 sudo certbot renew --dry-run
 ```
 
-## 4. Tjänsten
+## 4. Tjänsten — som användar-unit
+
+Bun-apparna på maskinen (`be.smutje.se`, `classroom-app`, `bun.smutje.se`) kör som **användar-units**,
+inte system-units. Det är därför de kan startas om utan sudo, och den här appen följer samma mönster.
 
 ```bash
-sudo cp /var/www/sport.smutje.se/deploy/sport.smutje.se.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now sport.smutje.se
-systemctl status sport.smutje.se --no-pager
+bash /var/www/sport.smutje.se/deploy/ta-bort-systemd.sh
 ```
+
+Skriptet stoppar den gamla system-uniten (enda sudo-steget), installerar uniten i
+`~/.config/systemd/user/`, aktiverar den och kontrollerar att adressen svarar.
+
+`linger` är påslaget för `pi`, alltså startar användarens systemd vid boot utan inloggning — appen
+kommer upp av sig själv precis som förut.
+
+Vardagskommandon, utan sudo:
+
+```bash
+systemctl --user restart sport.smutje.se
+systemctl --user status sport.smutje.se
+journalctl --user -u sport.smutje.se -f
+```
+
+En system-unit kräver root eftersom `systemctl` frågar PID 1 över D-Bus. Det handlar inte om
+filrättigheter: filerna ägs av `pi` och processen kör som `pi` hela tiden.
 
 Stoppa en eventuell `bun run dev` som ligger på 3011 först, annars krockar porten:
 

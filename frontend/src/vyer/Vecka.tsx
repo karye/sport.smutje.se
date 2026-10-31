@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { VyProps } from "../App";
 import { Fel, Kort, Laddar, Tomt } from "../komponenter";
+import { Hoger, Vanster, Varning } from "../ikoner";
 import { useBredd, useHändelser } from "../useHändelser";
 import {
   dagEtikett,
@@ -36,6 +37,8 @@ export function Vecka({ param, navigera, filter, onAnsvarig, vuxna, version }: V
   const { år, vecka } = tolkaParam(param);
   const idag = isoVecka(nu);
   const ärDennaVecka = idag.år === år && idag.vecka === vecka;
+  const nästa = flytta(idag.år, idag.vecka, 1);
+  const ärNästaVecka = nästa.år === år && nästa.vecka === vecka;
 
   const spann = useMemo(() => veckoSpann(år, vecka), [år, vecka]);
   const { handelser, laddar, fel } = useHändelser(spann, version);
@@ -65,6 +68,15 @@ export function Vecka({ param, navigera, filter, onAnsvarig, vuxna, version }: V
   const tidigarePass = tidigareDagar.flatMap((d) => perDag.get(dagNyckel(d)) ?? []);
 
   const axel = läge === "axel" && bredd >= 640;
+
+  // Dela först när vi vet vilka dagar som har pass: annars blir en spalt tom och den andra full,
+  // beroende på vilken veckodag det är.
+  const synligaDagar = kommandeDagar.filter((dag) => {
+    const lista = perDag.get(dagNyckel(dag)) ?? [];
+    return lista.length > 0 || (ärDennaVecka && dagNyckel(dag) === idagNyckel);
+  });
+  const mitt = Math.ceil(synligaDagar.length / 2);
+  const spalter = [synligaDagar.slice(0, mitt), synligaDagar.slice(mitt)];
   // Bara olösta krockar räknas: en krock som någon tagit ansvar för är inte längre ett problem.
   const olösta = valda.filter((h) => h.krock?.olost === true).length;
 
@@ -87,14 +99,15 @@ export function Vecka({ param, navigera, filter, onAnsvarig, vuxna, version }: V
           aria-label="Föregående vecka"
           onClick={() => navigera(veckoSträng(flytta(år, vecka, -1).år, flytta(år, vecka, -1).vecka))}
         >
-          ‹
+          <Vanster className="h-4 w-4" />
         </button>
         <div className="flex-1 text-center">
-          <span className="text-titel font-bold">v.{vecka}</span>
+          <span className="text-rubrik font-bold tabular-nums">v.{vecka}</span>
           <span className="ml-2 text-meta text-dampad">{år}</span>
           {olösta > 0 && (
-            <span className="ml-2 rounded-full bg-varning/15 px-2 py-0.5 text-meta font-semibold text-varning">
-              ⚠ {olösta} olösta
+            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-varning/15 px-2 py-0.5 text-meta font-semibold text-varning">
+              <Varning className="h-3.5 w-3.5" />
+              {olösta} olösta
             </span>
           )}
         </div>
@@ -104,28 +117,59 @@ export function Vecka({ param, navigera, filter, onAnsvarig, vuxna, version }: V
           aria-label="Nästa vecka"
           onClick={() => navigera(veckoSträng(flytta(år, vecka, 1).år, flytta(år, vecka, 1).vecka))}
         >
-          ›
+          <Hoger className="h-4 w-4" />
         </button>
       </div>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        {ärDennaVecka ? (
-          <button
-            type="button"
-            className="knapp !min-h-[40px]"
-            onClick={() => navigera(veckoSträng(flytta(år, vecka, 1).år, flytta(år, vecka, 1).vecka))}
-          >
-            Nästa vecka
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="knapp !min-h-[40px]"
-            onClick={() => navigera(veckoSträng(idag.år, idag.vecka))}
-          >
-            Tillbaka till denna vecka
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {ärDennaVecka ? (
+            /*
+              Tre tillstånd, samma ord som i resten av appen: "aktuell" i stället för "denna".
+              På aktuell eller nästa vecka finns två knappar, och den vecka man står i är märkt.
+              Har man bläddrat längre bort räcker en enda väg tillbaka.
+            */
+            <>
+              <span
+                aria-current="date"
+                className="knapp !min-h-[40px] !cursor-default !border-text !bg-text !text-bakgrund"
+              >
+                Aktuell vecka
+              </span>
+              <button
+                type="button"
+                className="knapp !min-h-[40px]"
+                onClick={() => navigera(veckoSträng(nästa.år, nästa.vecka))}
+              >
+                Nästa vecka
+              </button>
+            </>
+          ) : ärNästaVecka ? (
+            <>
+              <button
+                type="button"
+                className="knapp !min-h-[40px]"
+                onClick={() => navigera(veckoSträng(idag.år, idag.vecka))}
+              >
+                Aktuell vecka
+              </button>
+              <span
+                aria-current="date"
+                className="knapp !min-h-[40px] !cursor-default !border-text !bg-text !text-bakgrund"
+              >
+                Nästa vecka
+              </span>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="knapp !min-h-[40px]"
+              onClick={() => navigera(veckoSträng(idag.år, idag.vecka))}
+            >
+              Tillbaka till aktuell vecka
+            </button>
+          )}
+        </div>
         <div className="hidden overflow-hidden rounded-xl border border-kant sm:flex">
           <button
             type="button"
@@ -166,12 +210,12 @@ export function Vecka({ param, navigera, filter, onAnsvarig, vuxna, version }: V
       )}
 
       {!laddar && !fel && axel && (
-        <Tidsaxel dagar={kommandeDagar} perDag={perDag} navigera={navigera} />
+        <Tidsaxel dagar={dagar} perDag={perDag} navigera={navigera} />
       )}
 
       {!laddar && !fel && !axel && (
         <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
-          {[kommandeDagar.slice(0, 4), kommandeDagar.slice(4)].map((kolumn) => (
+          {spalter.map((kolumn) => (
             <div key={kolumn[0] ?? "tom"} className="grid gap-4">
               {kolumn.map((dag) => {
             const lista = perDag.get(dagNyckel(dag)) ?? [];
@@ -232,31 +276,38 @@ function Tidsaxel({
 
   return (
     <div className="overflow-hidden rounded-xl border border-kant bg-bakgrund">
-      {/* Dagnavet ligger utanför scrollen, så att det alltid syns. */}
-      <div className="flex border-b border-kant bg-sida">
-        <div className="w-11 shrink-0" />
-        {dagar.map((dag) => {
-          const ärIdag = dagNyckel(dag) === idag;
-          return (
-            <div
-              key={dagNyckel(dag)}
-              className={`flex-1 border-l border-kant/60 px-0.5 py-1 text-center ${
-                ärIdag ? "bg-bakgrund" : ""
-              }`}
-            >
-              <span className={`block text-meta ${ärIdag ? "font-bold text-primar" : "text-dampad"}`}>
-                {ärIdag ? "Idag" : veckodagKort(dag)}
-              </span>
-              <span className="block text-meta tabular-nums text-dampad">
-                {dagINumma(dag)}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      {/*
+        Dagnavet ligger inne i scrollrutan och är klistrat i överkant. Låg det utanför blev
+        kolumnerna olika breda så fort lodrät scroll list dök upp: kroppen tappade scrollfältets
+        bredd, huvudet behöll den, och varje kolumn gled några pixlar fel.
+      */}
+      <div className="max-h-[70vh] overflow-y-auto [scrollbar-gutter:stable]">
+          <div className="sticky top-0 z-20 flex border-b border-kant bg-sida">
+          <div className="w-11 shrink-0" />
+          {dagar.map((dag) => {
+            const ärIdag = dagNyckel(dag) === idag;
+            return (
+              <div
+                key={dagNyckel(dag)}
+                className={`min-w-0 flex-1 border-l border-kant/60 px-0.5 py-1 text-center ${
+                  ärIdag ? "bg-bakgrund" : ""
+                }`}
+              >
+                <span className={`block text-meta ${ärIdag ? "font-bold text-primar" : "text-dampad"}`}>
+                  {ärIdag ? "Idag" : veckodagKort(dag)}
+                </span>
+                <span className="block text-meta tabular-nums text-dampad">
+                  {dagINumma(dag)}
+                </span>
+              </div>
+            );
+          })}
+          </div>
 
-      <div className="max-h-[70vh] overflow-y-auto">
-        <div className="flex">
+        {/* pt-2: etiketten "06" ligger på top 0 och skjuts uppåt av -translate-y-1/2, alltså
+            hamnade halva siffran ovanför kanten. Samma förskjutning gäller kolumnerna, så
+            linjerna och tiderna följs åt. */}
+        <div className="flex pt-2">
           <div className="relative w-11 shrink-0" style={{ height: HÖJD }}>
             {TIMMAR.map((t) => (
               <span
@@ -315,6 +366,12 @@ function Tidsaxel({
                   const till = Math.max(från + 0.35, Math.min(23, timmeFraktion(h.slut)));
                   const topp = (från - 6) * TIMME_PX;
                   const höjd = Math.max(20, (till - från) * TIMME_PX - 2);
+
+                  // Två pass som krockar samma dag låg tidigare rakt ovanpå varandra. Nu delar de
+                  // på kolumnbredden, så att båda syns.
+                  const syskon = lista.filter((x) => x.start < h.slut && x.slut > h.start);
+                  const plats = Math.max(0, syskon.findIndex((x) => x.id === h.id));
+                  const andel = 100 / Math.max(1, syskon.length);
                   return (
                     <button
                       key={h.id}
@@ -323,14 +380,24 @@ function Tidsaxel({
                       title={`${h.titel} · ${klockslag(h.start)}–${klockslag(h.slut)}${
                         h.samling != null ? ` · samling ${klockslag(h.samling)}` : ""
                       }`}
-                      className="absolute inset-x-0.5 z-10 overflow-hidden rounded-md px-1 py-0.5 text-left text-meta font-semibold leading-tight text-white shadow-sm"
-                      style={{ top: topp, height: höjd, background: h.farg }}
+                      className="absolute z-10 overflow-hidden rounded-md px-1 py-0.5 text-left text-meta font-semibold leading-tight text-white shadow-sm"
+                      style={{
+                        top: topp,
+                        height: höjd,
+                        left: `calc(${plats * andel}% + 2px)`,
+                        width: `calc(${andel}% - 4px)`,
+                        background: h.farg,
+                      }}
                     >
                       <span className="block truncate">{h.titel}</span>
                       {höjd >= 34 && (
                         <span className="block truncate font-normal opacity-90">{klockslag(h.start)}</span>
                       )}
-                      {h.krock?.olost && <span className="absolute right-0.5 top-0.5 text-[10px]">⚠</span>}
+                      {h.krock?.olost && (
+                <span className="absolute right-0.5 top-0.5">
+                  <Varning className="h-3 w-3" />
+                </span>
+              )}
                     </button>
                   );
                 })}
