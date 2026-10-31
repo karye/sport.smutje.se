@@ -1,0 +1,18 @@
+# Hemligheter och data får aldrig in i repot.
+.env
+app/data/
+app/data/backup/
+app/node_modules/
+frontend/node_modules/
+frontend/dist/
+app/public/
+app/*.log
+dist/
+
+# Utdrag av källkoden gjorda för att klistras in någon annanstans — inte källa.
+ts_*.txt
+
+# Bun och editor
+*.lockb
+.DS_Store
+.vscode/

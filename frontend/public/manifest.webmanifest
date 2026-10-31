@@ -1,0 +1,16 @@
+{
+  "name": "Familjens kalender",
+  "short_name": "Kalendern",
+  "description": "Barn 1 och Barn 2:s idrotter, samlade.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "lang": "sv",
+  "icons": [
+    { "src": "/ikon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/ikon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Familjens kalender">
+  <rect width="512" height="512" rx="96" fill="#ffffff"/>
+  <rect x="76" y="104" width="360" height="332" rx="40" fill="none" stroke="#1d4ed8" stroke-width="28"/>
+  <path d="M76 200h360" stroke="#1d4ed8" stroke-width="28"/>
+  <path d="M164 76v72M348 76v72" stroke="#1d4ed8" stroke-width="28" stroke-linecap="round"/>
+  <rect x="140" y="248" width="72" height="56" rx="12" fill="#1d4ed8"/>
+  <rect x="236" y="248" width="72" height="56" rx="12" fill="#b45309"/>
+  <rect x="140" y="332" width="168" height="56" rx="12" fill="#1d4ed8" opacity=".35"/>
+</svg>

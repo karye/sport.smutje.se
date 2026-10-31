@@ -1,0 +1,17 @@
+[Unit]
+Description=Familjekalender sport.smutje.se (Bun)
+After=network.target
+
+[Service]
+User=pi
+Group=pi
+WorkingDirectory=/var/www/sport.smutje.se/app
+EnvironmentFile=/var/www/sport.smutje.se/.env
+ExecStart=/home/pi/.nvm/versions/node/v26.0.0/bin/bun run src/index.ts
+Restart=always
+RestartSec=3
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
